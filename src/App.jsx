@@ -225,6 +225,40 @@ const saveSettings = (settings) => {
 // ============================================================================
 
 export default function SalesRecorder() {
+  // --------------------------------------------------------------------------
+  // VIEWPORT / DESKTOP WRAP
+  // --------------------------------------------------------------------------
+  const [isWide, setIsWide] = useState(() => {
+    try {
+      return window.innerWidth >= 720;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    // Make the app look consistent when deployed inside a normal webpage.
+    // (Avoid default browser margins and body background clashes.)
+    try {
+      document.body.style.margin = '0';
+      document.body.style.backgroundColor = '#e9eef3';
+    } catch {}
+
+    const onResize = () => {
+      try {
+        setIsWide(window.innerWidth >= 720);
+      } catch {}
+    };
+    try {
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    } catch {
+      return undefined;
+    }
+  }, []);
+
+  // Root container style that behaves well on desktop browsers.
+  const shellStyle = isWide ? { ...styles.container, ...styles.containerWide } : styles.container;
   const [screen, setScreen] = useState('entry'); // entry, menu, table, sales, manage_items, settings
   const [records, setRecords] = useState(loadRecords());
   const [categories, setCategories] = useState(loadCategories());
@@ -503,7 +537,7 @@ export default function SalesRecorder() {
 
   if (screen === 'menu') {
     return (
-      <div style={styles.container}>
+      <div style={shellStyle}>
         <div style={styles.header}>
           <button style={styles.headerBtn} onClick={() => setScreen('entry')}>BACK</button>
         </div>
@@ -531,7 +565,7 @@ export default function SalesRecorder() {
     const totalSales = todayRecords.filter(r => !r.is_void).reduce((sum, r) => sum + (r.total_price || 0), 0);
 
     return (
-      <div style={styles.container}>
+      <div style={shellStyle}>
         {showEditModal && editingRecord && (
           <EditModal
             record={editingRecord}
@@ -680,7 +714,7 @@ export default function SalesRecorder() {
     const totalAmt = ledgerRows.reduce((s, r) => s + Number(r.total_price || 0), 0);
 
     return (
-      <div style={styles.container}>
+      <div style={shellStyle}>
         {showSalesEditModal && salesEditing && (
           <SalesEditModal
             record={salesEditing}
@@ -855,7 +889,7 @@ export default function SalesRecorder() {
 
   // Entry Screen
   return (
-    <div style={styles.container}>
+    <div style={shellStyle}>
       {showDraftModal && selectedItem && (
         <DraftSaleModal
           categories={categories}
@@ -1940,7 +1974,7 @@ function ManageItemsScreen({ categories, items, onUpdateCategories, onUpdateItem
   const itemFolderOptions = buildCategoryOptions();
 
   return (
-    <div style={styles.container}>
+    <div style={shellStyle}>
       <div style={styles.header}>
         <button style={styles.headerBtn} onClick={onBack}>BACK</button>
         <div style={styles.headerTitle}>Manage Items</div>
@@ -2244,7 +2278,7 @@ function SettingsScreen({ settings, onUpdate, onBack }) {
   );
 
   return (
-    <div style={styles.container}>
+    <div style={shellStyle}>
       <div style={styles.header}>
         <button style={styles.headerBtn} onClick={onBack}>BACK</button>
         <div style={styles.headerTitle}>Settings</div>
@@ -2271,11 +2305,32 @@ function SettingsScreen({ settings, onUpdate, onBack }) {
 
 const styles = {
   container: {
-    minHeight: '100vh',
-    backgroundColor: '#e9eef3',
+    // App surface (centered on desktop via containerWide)
+    minHeight: '100dvh',
+    width: '100%',
+    maxWidth: '560px',
+    margin: '0 auto',
+    backgroundColor: '#f7f9fb',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     display: 'flex',
     flexDirection: 'column',
+  },
+
+  containerWide: {
+    borderRadius: '18px',
+    overflow: 'hidden',
+    boxShadow: '0 12px 32px rgba(0,0,0,0.14)',
+    border: '1px solid rgba(0,0,0,0.10)',
+    marginTop: '16px',
+    marginBottom: '16px',
+  },
+
+  containerWide: {
+    margin: '14px auto',
+    borderRadius: '18px',
+    overflow: 'hidden',
+    boxShadow: '0 12px 34px rgba(0,0,0,0.14)',
+    border: '1px solid rgba(0,0,0,0.08)',
   },
 
   // ==============================
