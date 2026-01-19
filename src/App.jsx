@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 
 console.log("SUPABASE URL:", import.meta.env.VITE_SUPABASE_URL);
 
-
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -868,6 +867,7 @@ export default function SalesRecorder() {
   if (screen === 'manage_items') {
     return (
       <ManageItemsScreen
+        shellStyle={shellStyle}
         categories={categories}
         items={items}
         onUpdateCategories={setCategories}
@@ -884,6 +884,7 @@ export default function SalesRecorder() {
   if (screen === 'settings') {
     return (
       <SettingsScreen
+        shellStyle={shellStyle}
         settings={settings}
         onUpdate={setSettings}
         onBack={() => setScreen('menu')}
@@ -1625,7 +1626,7 @@ function EditModal({ record, items, categories, onSave, onCancel }) {
 // ============================================================================
 
 
-function ManageItemsScreen({ categories, items, onUpdateCategories, onUpdateItems, onBack, onToast }) {
+function ManageItemsScreen({ shellStyle, categories, items, onUpdateCategories, onUpdateItems, onBack, onToast }) {
   // Folder/File explorer model:
   // - categories == folders (can nest via parent_id)
   // - items == files (belong to category_id folder; null means root)
@@ -2183,7 +2184,7 @@ function ManageItemsScreen({ categories, items, onUpdateCategories, onUpdateItem
 // SETTINGS SCREEN (opening/closing hours for business-day grouping)
 // ============================================================================
 
-function SettingsScreen({ settings, onUpdate, onBack }) {
+function SettingsScreen({ shellStyle, settings, onUpdate, onBack }) {
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
   const minToParts = (minutes) => {
@@ -2316,6 +2317,7 @@ const styles = {
     maxWidth: '420px',
     margin: '0 auto',
     backgroundColor: '#f7f9fb',
+    color: '#13202e',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     display: 'flex',
     flexDirection: 'column',
@@ -3314,7 +3316,7 @@ const styles = {
     backgroundColor: 'rgba(0,0,0,0.55)',
     display: 'flex',
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     padding: '12px',
     paddingTop: 'max(12px, env(safe-area-inset-top))',
     paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
@@ -3391,7 +3393,7 @@ const styles = {
     backgroundColor: 'rgba(0,0,0,0.55)',
     display: 'flex',
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     padding: '12px',
     paddingTop: 'max(12px, env(safe-area-inset-top))',
     paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
@@ -3811,12 +3813,14 @@ const styles = {
   // Modal field helpers (used by Manage Items)
   // ==============================
   modalCard: {
-    width: '92%',
+    width: '92vw',
     maxWidth: '420px',
+    maxHeight: 'calc(100dvh - 24px)',
     borderRadius: '16px',
     backgroundColor: '#ffffff',
     border: '1px solid rgba(0,0,0,0.18)',
     overflow: 'hidden',
+    boxSizing: 'border-box',
   },
   modalHeader: {
     padding: '12px 14px',
