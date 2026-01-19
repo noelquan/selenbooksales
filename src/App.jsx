@@ -242,6 +242,10 @@ export default function SalesRecorder() {
     try {
       document.body.style.margin = '0';
       document.body.style.backgroundColor = '#e9eef3';
+      document.documentElement.style.height = '100%';
+      document.body.style.minHeight = '100%';
+      document.body.style.width = '100%';
+      document.body.style.overflowX = 'hidden';
     } catch {}
 
     const onResize = () => {
@@ -2305,24 +2309,18 @@ function SettingsScreen({ settings, onUpdate, onBack }) {
 
 const styles = {
   container: {
-    // App surface (centered on desktop via containerWide)
+    // App surface (mobile-first; centered on desktop)
+    height: '100dvh',
     minHeight: '100dvh',
     width: '100%',
-    maxWidth: '560px',
+    maxWidth: '420px',
     margin: '0 auto',
     backgroundColor: '#f7f9fb',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     display: 'flex',
     flexDirection: 'column',
-  },
-
-  containerWide: {
-    borderRadius: '18px',
     overflow: 'hidden',
-    boxShadow: '0 12px 32px rgba(0,0,0,0.14)',
-    border: '1px solid rgba(0,0,0,0.10)',
-    marginTop: '16px',
-    marginBottom: '16px',
+    boxSizing: 'border-box',
   },
 
   containerWide: {
@@ -2330,7 +2328,7 @@ const styles = {
     borderRadius: '18px',
     overflow: 'hidden',
     boxShadow: '0 12px 34px rgba(0,0,0,0.14)',
-    border: '1px solid rgba(0,0,0,0.08)',
+    border: '1px solid rgba(0,0,0,0.10)',
   },
 
   // ==============================
@@ -3312,25 +3310,28 @@ const styles = {
   },
   pickerOverlay: {
     position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     display: 'flex',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    padding: '12px',
+    paddingTop: 'max(12px, env(safe-area-inset-top))',
+    paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+    overflowY: 'auto',
     zIndex: 1000,
+    boxSizing: 'border-box',
   },
   pickerContainer: {
     backgroundColor: 'white',
-    borderRadius: '10px',
-    width: '90%',
-    maxWidth: '500px',
-    maxHeight: '80vh',
+    borderRadius: '12px',
+    width: '92vw',
+    maxWidth: '420px',
+    maxHeight: 'calc(100dvh - 24px)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    boxSizing: 'border-box',
   },
   pickerHeader: {
     backgroundColor: '#2c3e50',
@@ -3386,25 +3387,28 @@ const styles = {
   },
   modalOverlay: {
     position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     display: 'flex',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    padding: '12px',
+    paddingTop: 'max(12px, env(safe-area-inset-top))',
+    paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+    overflowY: 'auto',
     zIndex: 2000,
+    boxSizing: 'border-box',
   },
   modalContainer: {
     backgroundColor: 'white',
-    borderRadius: '10px',
-    width: '90%',
-    maxWidth: '450px',
-    maxHeight: '85vh',
+    borderRadius: '12px',
+    width: '92vw',
+    maxWidth: '420px',
+    maxHeight: 'calc(100dvh - 24px)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    boxSizing: 'border-box',
   },
 
   editSection: {
