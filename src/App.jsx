@@ -538,151 +538,6 @@ export default function SalesRecorder() {
   // RENDER SCREENS
   // ============================================================================
 
-
-  // ============================================================================
-  // FULL-SCREEN PANELS (replacing floating modals)
-  // ============================================================================
-  // These render as normal screens inside the app frame and can be closed.
-
-  if (showPicker) {
-    return (
-      <ItemPicker
-        shellStyle={shellStyle}
-        categories={categories}
-        items={items}
-        onSelect={(item) => {
-          setSelectedItem(item);
-          setShowPicker(false);
-        }}
-        onClose={() => setShowPicker(false)}
-      />
-    );
-  }
-
-  if (showDraftModal && selectedItem) {
-    return (
-      <DraftSaleModal
-        shellStyle={shellStyle}
-        categories={categories}
-        items={items}
-        initial={{
-          itemId: selectedItem.id,
-          itemLabel: selectedItem.label,
-          unitPrice: selectedItem.unit_price || 0,
-          quantity: quantity,
-          customerName: '',
-          paymentMethod: 'cash'
-        }}
-        onConfirm={({ itemId, itemLabel, unitPrice, quantity, customerName, paymentMethod }) => {
-          const t = getDraftTimeNumeric();
-          finalizeSale({
-            h12: t.h12,
-            min: t.min,
-            ampm: t.ampm,
-            itemId,
-            itemLabel,
-            unitPrice,
-            qty: quantity,
-            customerName,
-            paymentMethod
-          });
-        }}
-        onCancel={() => {
-          handleCancel();
-        }}
-        onClose={() => setShowDraftModal(false)}
-      />
-    );
-  }
-
-  if (showEditModal && editingRecord) {
-    return (
-      <EditModal
-        shellStyle={shellStyle}
-        record={editingRecord}
-        items={items}
-        categories={categories}
-        onSave={(updatedRecord) => {
-          const now = new Date();
-          const updated = {
-            ...updatedRecord,
-            updated_at_epoch_ms: now.getTime(),
-            updated_at_local: formatDateTime(now)
-          };
-          setRecords(records.map(r => r.entry_id === updated.entry_id ? updated : r));
-          setShowEditModal(false);
-          setEditingRecord(null);
-          setToast('Updated');
-          setTimeout(() => setToast(''), 2000);
-        }}
-        onCancel={() => {
-          setShowEditModal(false);
-          setEditingRecord(null);
-        }}
-      />
-    );
-  }
-
-  if (showSalesEditModal && salesEditing) {
-    return (
-      <SalesEditModal
-        shellStyle={shellStyle}
-        record={salesEditing}
-        categories={categories}
-        items={items}
-        onConfirm={(patch) => {
-          const typedLabel = String(patch.itemLabel || '').trim();
-          const price = Number(patch.unitPrice) || 0;
-          const qty = Math.max(1, Number(patch.quantity) || 1);
-          const total = price * qty;
-
-          const active = getActiveItemsWithPaths();
-          const norm = (x) => String(x || '').trim().toLowerCase();
-          const chosen = active.find(i => i.id === patch.itemId)
-            || active.find(i => norm(i.label) == norm(typedLabel))
-            || active.find(i => norm(`${i.categoryPath} > ${i.label}`) == norm(typedLabel));
-
-          const updated = {
-            ...salesEditing,
-            item_id: chosen ? chosen.id : '',
-            item_label: chosen ? chosen.label : typedLabel,
-            category_path: chosen ? chosen.categoryPath : 'Manual',
-            unit_price: price,
-            quantity: qty,
-            total_price: total,
-            customer_name: patch.customerName || '',
-            payment_method: patch.paymentMethod || 'cash',
-            updated_at_epoch_ms: Date.now(),
-            updated_at_local: formatDateTime(new Date())
-          };
-
-          if (!String(updated.item_label || '').trim()) {
-            setToast('Item required');
-            setTimeout(() => setToast(''), 2000);
-            return;
-          }
-
-          setRecords(prev => prev.map(r => r.entry_id === updated.entry_id ? updated : r));
-          setShowSalesEditModal(false);
-          setSalesEditing(null);
-          setToast('Updated');
-          setTimeout(() => setToast(''), 2000);
-        }}
-        onCancel={() => {
-          setShowSalesEditModal(false);
-          setSalesEditing(null);
-        }}
-        onDelete={() => {
-          setRecords(prev => prev.filter(r => r.entry_id !== salesEditing.entry_id));
-          setShowSalesEditModal(false);
-          setSalesEditing(null);
-          setToast('Deleted');
-          setTimeout(() => setToast(''), 2000);
-        }}
-      />
-    );
-  }
-
   if (screen === 'menu') {
     return (
       <div style={shellStyle}>
@@ -714,6 +569,31 @@ export default function SalesRecorder() {
 
     return (
       <div style={shellStyle}>
+        {showEditModal && editingRecord && (
+          <EditModal
+            record={editingRecord}
+            items={items}
+            categories={categories}
+            onSave={(updatedRecord) => {
+              const now = new Date();
+              const updated = {
+                ...updatedRecord,
+                updated_at_epoch_ms: now.getTime(),
+                updated_at_local: formatDateTime(now)
+              };
+              setRecords(records.map(r => r.entry_id === updated.entry_id ? updated : r));
+              setShowEditModal(false);
+              setEditingRecord(null);
+              setToast('Updated');
+              setTimeout(() => setToast(''), 2000);
+            }}
+            onCancel={() => {
+              setShowEditModal(false);
+              setEditingRecord(null);
+            }}
+          />
+        )}
+        
         <div style={styles.header}>
           <button style={styles.headerBtn} onClick={() => setScreen('entry')}>BACK</button>
           <div style={styles.headerTitle}>Table</div>
@@ -838,6 +718,68 @@ export default function SalesRecorder() {
 
     return (
       <div style={shellStyle}>
+        {showSalesEditModal && salesEditing && (
+          <SalesEditModal
+            record={salesEditing}
+            categories={categories}
+            items={items}
+            onConfirm={(patch) => {
+              // patch: { itemId?, itemLabel, unitPrice, quantity, customerName, paymentMethod }
+              const typedLabel = String(patch.itemLabel || '').trim();
+              const price = Number(patch.unitPrice) || 0;
+              const qty = Math.max(1, Number(patch.quantity) || 1);
+              const total = price * qty;
+
+              // If the typed label matches an existing active item, link to it.
+              const active = getActiveItemsWithPaths();
+              const norm = (x) => String(x || '').trim().toLowerCase();
+              const chosen = active.find(i => i.id === patch.itemId)
+                || active.find(i => norm(i.label) == norm(typedLabel))
+                || active.find(i => norm(`${i.categoryPath} > ${i.label}`) == norm(typedLabel));
+
+              const updated = {
+                ...salesEditing,
+                item_id: chosen ? chosen.id : '',
+                item_label: chosen ? chosen.label : typedLabel,
+                category_path: chosen ? chosen.categoryPath : 'Manual',
+                unit_price: price,
+                quantity: qty,
+                total_price: total,
+                customer_name: patch.customerName || '',
+                payment_method: patch.paymentMethod || 'cash',
+                updated_at_epoch_ms: Date.now(),
+                updated_at_local: formatDateTime(new Date())
+              };
+
+              // Require an item label (either from menu or manual)
+              if (!String(updated.item_label || '').trim()) {
+                setToast('Item required');
+                setTimeout(() => setToast(''), 2000);
+                return;
+              }
+
+              setRecords(prev => prev.map(r => r.entry_id === updated.entry_id ? updated : r));
+              setShowSalesEditModal(false);
+              setSalesEditing(null);
+              setToast('Updated');
+              setTimeout(() => setToast(''), 2000);
+            }}
+            onCancel={() => {
+              setShowSalesEditModal(false);
+              setSalesEditing(null);
+            }}
+            onDelete={() => {
+              // NOTE: Avoid window.confirm() because some embedded preview environments block it,
+              // making the Delete button appear to do nothing.
+              setRecords(prev => prev.filter(r => r.entry_id !== salesEditing.entry_id));
+              setShowSalesEditModal(false);
+              setSalesEditing(null);
+              setToast('Deleted');
+              setTimeout(() => setToast(''), 2000);
+            }}
+          />
+        )}
+
         <div style={styles.header}>
           <button style={styles.headerBtn} onClick={() => setScreen('menu')}>BACK</button>
           <div style={styles.headerTitle}>Sales</div>
@@ -953,7 +895,52 @@ export default function SalesRecorder() {
   // Entry Screen
   return (
     <div style={shellStyle}>
-            {/* Original (Claude-style) layout, tightened up, with + above time and − below */}
+      {showDraftModal && selectedItem && (
+        <DraftSaleModal
+          categories={categories}
+          items={items}
+          initial={{
+            itemId: selectedItem.id,
+            itemLabel: selectedItem.label,
+            unitPrice: selectedItem.unit_price || 0,
+            quantity: quantity,
+            customerName: '',
+            paymentMethod: 'cash'
+          }}
+          onConfirm={({ itemId, itemLabel, unitPrice, quantity, customerName, paymentMethod }) => {
+            const t = getDraftTimeNumeric();
+            finalizeSale({
+              h12: t.h12,
+              min: t.min,
+              ampm: t.ampm,
+              itemId,
+              itemLabel,
+              unitPrice,
+              qty: quantity,
+              customerName,
+              paymentMethod
+            });
+          }}
+          onCancel={() => {
+            // Cancel from modal cancels the whole sale
+            handleCancel();
+          }}
+          onClose={() => setShowDraftModal(false)}
+        />
+      )}
+      {showPicker && (
+        <ItemPicker
+          categories={categories}
+          items={items}
+          onSelect={(item) => {
+            setSelectedItem(item);
+            setShowPicker(false);
+          }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+      
+      {/* Original (Claude-style) layout, tightened up, with + above time and − below */}
       <div style={styles.header}>
         <button style={styles.headerBtn} onClick={() => setScreen('menu')}>MENU</button>
         <div style={styles.headerTitle}>Sales Recorder</div>
@@ -1046,7 +1033,7 @@ export default function SalesRecorder() {
 // ITEM PICKER COMPONENT
 // ============================================================================
 
-function ItemPicker({ shellStyle, categories, items, onSelect, onClose }) {
+function ItemPicker({ categories, items, onSelect, onClose }) {
   const [breadcrumb, setBreadcrumb] = useState([]);
 
   const currentCategoryId = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].id : null;
@@ -1086,36 +1073,36 @@ function ItemPicker({ shellStyle, categories, items, onSelect, onClose }) {
   };
 
   return (
-    <div style={shellStyle}>
-      <div style={styles.header}>
-        <button style={styles.headerBtn} onClick={handleBack}>
-          {breadcrumb.length > 0 ? 'BACK' : 'CLOSE'}
-        </button>
-        <div style={styles.headerTitle}>
-          {breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].label : 'Select Item'}
+    <div style={styles.pickerOverlay}>
+      <div style={styles.pickerContainer}>
+        <div style={styles.pickerHeader}>
+          <button style={styles.pickerBackBtn} onClick={handleBack}>
+            {breadcrumb.length > 0 ? 'BACK' : 'CLOSE'}
+          </button>
+          <div style={styles.pickerTitle}>
+            {breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].label : 'Select Item'}
+          </div>
         </div>
-        <div style={styles.headerBtnGhost} />
-      </div>
-
-      <div style={styles.pickerContentPanel}>
-        {childCategories.map(cat => (
-          <button
-            key={cat.id}
-            style={styles.pickerCategoryBtn}
-            onClick={() => handleCategoryClick(cat)}
-          >
-            {cat.label} →
-          </button>
-        ))}
-        {childItems.map(item => (
-          <button
-            key={item.id}
-            style={styles.pickerItemBtn}
-            onClick={() => handleItemClick(item)}
-          >
-            {item.label} · ${formatMoney(item.unit_price)}
-          </button>
-        ))}
+        <div style={styles.pickerContent}>
+          {childCategories.map(cat => (
+            <button 
+              key={cat.id} 
+              style={styles.pickerCategoryBtn}
+              onClick={() => handleCategoryClick(cat)}
+            >
+              {cat.label} →
+            </button>
+          ))}
+          {childItems.map(item => (
+            <button 
+              key={item.id} 
+              style={styles.pickerItemBtn}
+              onClick={() => handleItemClick(item)}
+            >
+              {item.label} · ${formatMoney(item.unit_price)}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1125,7 +1112,7 @@ function ItemPicker({ shellStyle, categories, items, onSelect, onClose }) {
 // DRAFT SALE MODAL (from Entry screen preview)
 // ============================================================================
 
-function DraftSaleModal({ shellStyle, categories, items, initial, onConfirm, onCancel, onClose }) {
+function DraftSaleModal({ categories, items, initial, onConfirm, onCancel, onClose }) {
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
   const escapeCsv = (s) => String(s ?? '').replace(/"/g, '""');
 
@@ -1319,7 +1306,7 @@ function DraftSaleModal({ shellStyle, categories, items, initial, onConfirm, onC
 // SALES EDIT MODAL (for existing records)
 // ============================================================================
 
-function SalesEditModal({ shellStyle, record, categories, items, onConfirm, onCancel, onDelete }) {
+function SalesEditModal({ record, categories, items, onConfirm, onCancel, onDelete }) {
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
   const buildCategoryPath = (categoryId) => {
@@ -1471,7 +1458,7 @@ function SalesEditModal({ shellStyle, record, categories, items, onConfirm, onCa
 // EDIT MODAL COMPONENT
 // ============================================================================
 
-function EditModal({ shellStyle, record, items, categories, onSave, onCancel }) {
+function EditModal({ record, items, categories, onSave, onCancel }) {
   const int = (x) => {
     const n = parseInt(x, 10);
     return Number.isFinite(n) ? n : 0;
@@ -1548,7 +1535,7 @@ function EditModal({ shellStyle, record, items, categories, onSave, onCancel }) 
   };
 
   return (
-    <div style={shellStyle}>
+    <div style={styles.modalOverlay}>
       <div style={styles.modalContainer}>
         {showItemPicker ? (
           <ItemPicker
@@ -2083,13 +2070,8 @@ function ManageItemsScreen({ shellStyle, categories, items, onUpdateCategories, 
 
       {/* Folder modal */}
       {folderModal.open && (
-        <div style={shellStyle}>
-          <div style={styles.header}>
-        <button style={styles.headerBtn} onClick={onClose}>CLOSE</button>
-        <div style={styles.headerTitle}>Edit Sale</div>
-        <div style={styles.headerBtnGhost} />
-      </div>
-      <div style={styles.panelBody}>
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
             <div style={styles.modalHeader}>
               <div style={styles.modalTitle}>{folderModal.mode === 'add' ? 'Create Folder' : 'Edit Folder'}</div>
             </div>
@@ -2126,13 +2108,8 @@ function ManageItemsScreen({ shellStyle, categories, items, onUpdateCategories, 
 
       {/* Item modal */}
       {itemModal.open && (
-        <div style={shellStyle}>
-          <div style={styles.header}>
-        <button style={styles.headerBtn} onClick={onCancel}>CLOSE</button>
-        <div style={styles.headerTitle}>Edit Sale</div>
-        <div style={styles.headerBtnGhost} />
-      </div>
-      <div style={styles.panelBody}>
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
             <div style={styles.modalHeader}>
               <div style={styles.modalTitle}>{itemModal.mode === 'add' ? 'Create Item' : 'Edit Item'}</div>
             </div>
@@ -2179,13 +2156,8 @@ function ManageItemsScreen({ shellStyle, categories, items, onUpdateCategories, 
 
       {/* Confirm modal */}
       {confirmModal.open && (
-        <div style={shellStyle}>
-          <div style={styles.header}>
-        <button style={styles.headerBtn} onClick={onCancel}>CLOSE</button>
-        <div style={styles.headerTitle}>Edit Entry</div>
-        <div style={styles.headerBtnGhost} />
-      </div>
-      <div style={styles.panelBody}>
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
             <div style={styles.modalHeader}>
               <div style={styles.modalTitle}>{confirmModal.title}</div>
             </div>
@@ -2337,1602 +2309,1200 @@ function SettingsScreen({ shellStyle, settings, onUpdate, onBack }) {
 }
 
 const styles = {
+  // ---------------------------------------------------------------------------
+  // LAYOUT TOKENS
+  // ---------------------------------------------------------------------------
   container: {
-    // App surface (mobile-first; centered on desktop)
-    height: '100dvh',
-    minHeight: '100dvh',
+    // Mobile-first app shell
+    minHeight: '100svh',
     width: '100%',
-    maxWidth: '420px',
+    maxWidth: '520px',
     margin: '0 auto',
-    backgroundColor: '#f7f9fb',
-    color: '#13202e',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    backgroundColor: '#f6f7f9',
+    color: '#0f172a',
+    boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden',
-    boxSizing: 'border-box',
+    padding: '12px',
+    paddingTop: 'max(12px, env(safe-area-inset-top))',
+    paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+    gap: '12px',
+    overflowX: 'hidden',
   },
 
   containerWide: {
-    margin: '14px auto',
-    borderRadius: '18px',
-    overflow: 'hidden',
-    boxShadow: '0 12px 34px rgba(0,0,0,0.14)',
-    border: '1px solid rgba(0,0,0,0.10)',
-  },
-
-  // ==============================
-  // ENTRY SCREEN (prototype-like)
-  // ==============================
-  topMenuBar: {
-    backgroundColor: '#f3d8cc',
-    height: '56px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottom: '1px solid rgba(0,0,0,0.12)',
-    flexShrink: 0,
-  },
-  menuBarBtn: {
-    width: '100%',
-    height: '100%',
-    background: 'transparent',
-    border: 'none',
-    fontSize: '16px',
-    fontWeight: 800,
-    letterSpacing: '0.5px',
-    cursor: 'pointer',
-  },
-  entryLayout: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 0,
-    minHeight: 0,
-  },
-  timeStrip: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 0,
-    backgroundColor: '#cfe3f6',
-    borderBottom: '1px solid rgba(0,0,0,0.12)',
-    flexShrink: 0,
-  },
-  timeCol: {
-    display: 'grid',
-    gridTemplateRows: '52px 86px 52px',
-    borderRight: '1px solid rgba(0,0,0,0.12)',
-  },
-  timeStripBtn: {
-    border: 'none',
-    backgroundColor: '#b6d2ee',
-    fontSize: '26px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  timeValueBox: {
-    backgroundColor: '#dcedff',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '4px',
-  },
-  timeValueLabel: {
-    fontSize: '12px',
-    fontWeight: 900,
-    letterSpacing: '0.6px',
-    opacity: 0.9,
-  },
-  timeValue: {
-    fontSize: '34px',
-    fontWeight: 900,
-    lineHeight: 1,
-  },
-  itemBlock: {
-    flex: 1,
-    minHeight: 0,
-    display: 'grid',
-    gridTemplateColumns: '92px 1fr',
-    backgroundColor: '#bfe6b0',
-    borderBottom: '1px solid rgba(0,0,0,0.12)',
-  },
-  itemBackBtn: {
-    border: 'none',
-    backgroundColor: '#d7f0cf',
-    fontSize: '16px',
-    fontWeight: 900,
-    cursor: 'pointer',
-    borderRight: '1px solid rgba(0,0,0,0.12)',
-  },
-  itemCenter: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'column',
-    gap: 0,
-    padding: 0,
-    textAlign: 'center',
-  },
-  itemSelectedWrap: {
-    width: '100%',
-    maxWidth: '520px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '10px',
-    padding: '10px',
-  },
-  itemSelectBtn: {
-    width: '100%',
-    height: '100%',
-    border: 'none',
-    backgroundColor: 'transparent',
-    fontSize: '18px',
-    fontWeight: 900,
-    cursor: 'pointer',
-    letterSpacing: '0.6px',
-  },
-  itemTitle: {
-    fontSize: '22px',
-    fontWeight: 900,
-  },
-  itemMeta: {
-    fontSize: '13px',
-    opacity: 0.85,
-    fontWeight: 700,
-  },
-  itemActionsRow: {
-    display: 'flex',
-    gap: '8px',
-    width: '100%',
-    justifyContent: 'center',
-  },
-  itemActionBtn: {
-    flex: 1,
-    maxWidth: '160px',
-    height: '44px',
-    border: '1px solid rgba(0,0,0,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.65)',
-    borderRadius: '10px',
-    fontSize: '14px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  qtyStrip: {
-    display: 'grid',
-    gridTemplateColumns: '110px 1fr 110px',
-    backgroundColor: '#e7b7e5',
-    borderBottom: '1px solid rgba(0,0,0,0.12)',
-    flexShrink: 0,
-    height: '88px',
-  },
-  qtyBtn: {
-    border: 'none',
-    backgroundColor: '#f0d0ef',
-    fontSize: '32px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  qtyCenter: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '4px',
-    backgroundColor: '#e6a7e3',
-  },
-  qtyLabel: {
-    fontSize: '12px',
-    fontWeight: 900,
-    letterSpacing: '0.6px',
-  },
-  qtyValue: {
-    fontSize: '30px',
-    fontWeight: 900,
-    lineHeight: 1,
-  },
-  previewStrip: {
-    backgroundColor: '#f2f2f2',
-    padding: '8px 10px',
-    fontSize: '13px',
-    fontWeight: 700,
-    textAlign: 'center',
-    borderBottom: '1px solid rgba(0,0,0,0.08)',
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  bottomBar: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    height: '72px',
-    flexShrink: 0,
-  },
-  bottomBtn: {
-    border: 'none',
-    fontSize: '16px',
-    fontWeight: 900,
-    letterSpacing: '0.5px',
-    cursor: 'pointer',
-  },
-  bottomConfirm: {
-    backgroundColor: '#f1dccf',
-    borderRight: '1px solid rgba(0,0,0,0.12)',
-  },
-  bottomCancel: {
-    backgroundColor: '#efc0a6',
-  },
-  bottomDisabled: {
-    opacity: 0.55,
-    cursor: 'not-allowed',
+    // Desktop: just a little breathing room
+    maxWidth: '720px',
+    padding: '14px',
+    borderRadius: '14px',
+    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f6f7f9',
   },
 
   header: {
-    backgroundColor: '#2c3e50',
-    color: 'white',
-    padding: '10px',
+    position: 'sticky',
+    top: 0,
+    zIndex: 10,
     display: 'flex',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: '12px',
-    position: 'relative',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '10px',
+    borderRadius: '12px',
+    backgroundColor: '#ffffff',
+    boxShadow: '0 1px 0 rgba(15, 23, 42, 0.08)',
   },
-  headerBtn: {
-    backgroundColor: 'transparent',
-    color: 'white',
-    border: '2px solid white',
-    borderRadius: '6px',
-    padding: '6px 12px',
-    fontSize: '13px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
+
   headerTitle: {
     fontSize: '16px',
-    fontWeight: 'bold',
+    fontWeight: 700,
+    letterSpacing: '0.2px',
+    color: '#0f172a',
+    textAlign: 'center',
     flex: 1,
+    minWidth: 0,
+  },
+
+  headerBtn: {
+    height: '40px',
+    padding: '0 12px',
+    borderRadius: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 700,
+    fontSize: '12px',
+    letterSpacing: '0.6px',
+    cursor: 'pointer',
+    flexShrink: 0,
+  },
+
+  // ---------------------------------------------------------------------------
+  // COMMON SURFACES / TEXT
+  // ---------------------------------------------------------------------------
+  sectionTight: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '12px',
+    boxShadow: '0 1px 0 rgba(15, 23, 42, 0.06)',
+  },
+
+  toast: {
+    position: 'fixed',
+    left: '50%',
+    bottom: '18px',
+    transform: 'translateX(-50%)',
+    zIndex: 60,
+    backgroundColor: '#111827',
+    color: '#ffffff',
+    padding: '10px 12px',
+    borderRadius: '999px',
+    fontSize: '13px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+    maxWidth: 'min(520px, calc(100vw - 24px))',
     textAlign: 'center',
   },
-  entryContent: {
-    padding: '10px',
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
+
+  emptyState: {
+    padding: '18px 12px',
+    textAlign: 'center',
+    color: '#475569',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    border: '1px dashed rgba(15, 23, 42, 0.16)',
+  },
+
+  dangerBtn: {
+    borderColor: 'rgba(185, 28, 28, 0.35)',
+    color: '#b91c1c',
+    backgroundColor: '#fff5f5',
+  },
+
+  // ---------------------------------------------------------------------------
+  // MENU
+  // ---------------------------------------------------------------------------
+  menuContent: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
     gap: '10px',
   },
-  // ==============================
-  // ENTRY SCREEN (Claude-style, slightly tighter)
-  // ==============================
+
+  menuItem: {
+    width: '100%',
+    height: '48px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 800,
+    letterSpacing: '0.4px',
+    cursor: 'pointer',
+  },
+
+  // ---------------------------------------------------------------------------
+  // ENTRY SCREEN
+  // ---------------------------------------------------------------------------
   entryContentTight: {
-    padding: '10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
     flex: 1,
     minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
   },
+
   sectionDate: {
-    backgroundColor: '#ffffff',
-    borderRadius: '10px',
-    padding: '8px 10px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
-    border: '1px solid rgba(0,0,0,0.14)',
-    display: 'grid',
-    gridTemplateColumns: '44px 1fr 44px',
+    display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    justifyContent: 'space-between',
+    gap: '10px',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '10px',
+    boxShadow: '0 1px 0 rgba(15, 23, 42, 0.06)',
   },
+
   dateBtn: {
-    height: '38px',
+    width: '44px',
+    height: '40px',
     borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.22)',
-    backgroundColor: '#f3f5f7',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
     fontSize: '18px',
     fontWeight: 900,
     cursor: 'pointer',
   },
+
   dateValue: {
+    fontWeight: 800,
+    color: '#0f172a',
+    fontSize: '14px',
     textAlign: 'center',
-    fontSize: '13px',
-    fontWeight: 900,
-    color: '#1f2d3a',
-    letterSpacing: '0.2px',
+    flex: 1,
+    minWidth: 0,
+    lineHeight: 1.2,
   },
-  sectionTight: {
-    backgroundColor: 'white',
-    borderRadius: '10px',
-    padding: '10px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
-    border: '1px solid rgba(0,0,0,0.14)',
-  },
+
   timeSectionCompact: {
-    // Keep time controls as a compact strip so the Item section dominates
-    padding: '6px 8px',
+    padding: '12px',
   },
-  sectionLabelTight: {
-    fontSize: '12px',
-    fontWeight: 900,
-    color: '#5f6b75',
-    marginBottom: '6px',
-    letterSpacing: '0.4px',
-  },
+
   timeControlsTight: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr 1fr',
-    gap: '8px',
-  },
-  timeColumnTight: {
-    display: 'grid',
-    gridTemplateRows: '26px 34px 26px',
-    gap: '4px',
+    gap: '10px',
     alignItems: 'stretch',
   },
-  timeBtnTight: {
-    width: '100%',
-    height: '26px',
-    borderRadius: '9px',
-    border: '1px solid rgba(0,0,0,0.22)',
-    backgroundColor: '#f3f5f7',
-    fontSize: '14px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  timeMidBox: {
-    borderRadius: '12px',
-    border: '1px solid rgba(0,0,0,0.18)',
-    backgroundColor: '#ffffff',
+
+  timeColumnTight: {
     display: 'flex',
     flexDirection: 'column',
+    gap: '8px',
+    alignItems: 'stretch',
+  },
+
+  timeBtnTight: {
+    height: '40px',
+    borderRadius: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 900,
+    fontSize: '16px',
+    cursor: 'pointer',
+  },
+
+  timeMidBox: {
+    height: '44px',
+    borderRadius: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '2px',
   },
+
   timeMidValue: {
-    fontSize: '20px',
+    fontSize: '16px',
     fontWeight: 900,
-    lineHeight: 1,
-    color: '#2c3e50',
+    letterSpacing: '0.6px',
+    color: '#0f172a',
   },
+
   itemSectionGrow: {
     flex: 1,
     minHeight: 0,
+  },
+
+  itemAreaTight: {
     display: 'flex',
     flexDirection: 'column',
+    gap: '10px',
   },
-  itemAreaTight: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
   itemBigBtn: {
     width: '100%',
-    height: '100%',
-    minHeight: '120px',
+    height: '64px',
     borderRadius: '14px',
-    border: '2px dashed rgba(0,0,0,0.25)',
-    backgroundColor: '#f8fafc',
-    fontSize: '18px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  itemSelectedCard: {
-    width: '100%',
-    borderRadius: '14px',
-    border: '1px solid rgba(0,0,0,0.18)',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
     backgroundColor: '#ffffff',
-    padding: '14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    alignItems: 'center',
-    justifyContent: 'center',
-    textAlign: 'center',
-  },
-  itemTitle2: {
-    fontSize: '22px',
+    color: '#0f172a',
     fontWeight: 900,
-    color: '#2c3e50',
-  },
-  itemMeta2: {
-    fontSize: '13px',
-    fontWeight: 800,
-    color: '#5f6b75',
-  },
-  itemActionsRow2: {
-    display: 'flex',
-    gap: '10px',
-    width: '100%',
-    justifyContent: 'center',
-  },
-  smallActionBtn: {
-    flex: 1,
-    maxWidth: '160px',
-    height: '44px',
-    borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.12)',
-    backgroundColor: '#f7f8fa',
     fontSize: '14px',
-    fontWeight: 900,
+    letterSpacing: '0.4px',
     cursor: 'pointer',
   },
 
-  // Inline controls in selected item card
-  qtyInlineDisplay: {
-    marginTop: 6,
-    fontSize: 13,
-    opacity: 0.9,
-  },
-  qtyInlineBtn: {
-    flex: '0 0 52px',
-    height: 44,
-    border: '1px solid rgba(0,0,0,0.22)',
-    borderRadius: 10,
-    background: '#f8fafc',
-    fontSize: 20,
-    fontWeight: 700,
-  },
-  confirmInlineBtn: {
-    flex: 1,
-    height: 44,
-    border: '1px solid #15803d',
-    borderRadius: 10,
-    background: '#16a34a',
-    color: '#fff',
-    fontWeight: 800,
-    letterSpacing: 0.3,
-  },
-  cancelInlineBtn: {
-    flex: 1,
-    height: 44,
-    border: '1px solid #b91c1c',
-    borderRadius: 10,
-    background: '#dc2626',
-    color: '#fff',
-    fontWeight: 800,
-    letterSpacing: 0.3,
-  },
-  deleteBtn: {
-    flex: 1,
-    height: 44,
-    border: '1px solid rgba(0,0,0,0.25)',
-    borderRadius: 10,
-    background: '#111827',
-    color: '#fff',
-    fontWeight: 800,
-    letterSpacing: 0.3,
-  },
-  qtyRowTight: {
-    display: 'grid',
-    gridTemplateColumns: '64px 1fr 64px',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  qtyBtnTight: {
-    height: '54px',
-    borderRadius: '12px',
-    border: '1px solid rgba(0,0,0,0.12)',
-    backgroundColor: '#f7f8fa',
-    fontSize: '24px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  qtyMid: {
-    height: '54px',
-    borderRadius: '12px',
-    border: '1px solid rgba(0,0,0,0.10)',
+  itemSelectedCard: {
+    borderRadius: '14px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
     backgroundColor: '#ffffff',
+    padding: '12px',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '2px',
+    gap: '8px',
   },
-  qtyMidValue: {
-    fontSize: '26px',
-    fontWeight: 900,
-    lineHeight: 1,
-    color: '#2c3e50',
-  },
-  qtyMidLabel: {
-    fontSize: '11px',
-    fontWeight: 800,
-    opacity: 0.75,
-    letterSpacing: '0.5px',
-  },
-  previewTight: {
-    padding: '14px 14px',
-    borderRadius: '12px',
-    backgroundColor: '#ffffff',
-    border: '1px solid rgba(0,0,0,0.20)',
+
+  itemTitle2: {
     fontSize: '16px',
-    fontWeight: 800,
-    color: '#2c3e50',
-    textAlign: 'center',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
+    fontWeight: 900,
+    color: '#0f172a',
   },
+
+  itemMeta2: {
+    fontSize: '12px',
+    color: '#475569',
+    lineHeight: 1.2,
+  },
+
+  qtyInlineDisplay: {
+    fontSize: '12px',
+    color: '#0f172a',
+    fontWeight: 800,
+  },
+
+  itemActionsRow2: {
+    display: 'grid',
+    gridTemplateColumns: '48px 1fr 1fr 48px',
+    gap: '8px',
+    alignItems: 'center',
+  },
+
+  qtyInlineBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 900,
+    fontSize: '18px',
+    cursor: 'pointer',
+  },
+
+  confirmInlineBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#0f172a',
+    color: '#ffffff',
+    fontWeight: 900,
+    fontSize: '12px',
+    letterSpacing: '0.8px',
+    cursor: 'pointer',
+  },
+
+  cancelInlineBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 900,
+    fontSize: '12px',
+    letterSpacing: '0.8px',
+    cursor: 'pointer',
+  },
+
+  previewTight: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    color: '#0f172a',
+    fontSize: '13px',
+    lineHeight: 1.25,
+    wordBreak: 'break-word',
+  },
+
   previewClickable: {
     cursor: 'pointer',
-    backgroundColor: '#f7f8fa',
-    border: '1px solid rgba(0,0,0,0.28)',
-  },
-  draftGridRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
-    gap: '10px',
-    marginBottom: '10px',
-  },
-  draftCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '2px',
-  },
-  draftGridRow2: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '10px',
-    marginBottom: '10px',
-  },
-  qtyRowInline: {
-    display: 'grid',
-    gridTemplateColumns: '46px 1fr 46px',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  qtyInlineValue: {
-    height: '40px',
-    borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.25)',
-    backgroundColor: '#ffffff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 900,
-    fontSize: '18px',
-    color: '#2c3e50',
-  },
-  draftPreviewLine: {
-    marginTop: '2px',
-    padding: '10px 12px',
-    borderRadius: '12px',
-    backgroundColor: '#f7f8fa',
-    border: '1px solid rgba(0,0,0,0.18)',
-    fontSize: '15px',
-    fontWeight: 900,
-    textAlign: 'center',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  actionRowTight: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '12px',
-  },
-  primaryBtnTight: {
-    height: '54px',
-    borderRadius: '12px',
-    border: 'none',
-    backgroundColor: '#2ecc71',
-    color: 'white',
-    fontSize: '15px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  primaryDisabledTight: {
-    opacity: 0.5,
-    cursor: 'not-allowed',
-  },
-  secondaryBtnTight: {
-    height: '54px',
-    borderRadius: '12px',
-    border: 'none',
-    backgroundColor: '#e74c3c',
-    color: 'white',
-    fontSize: '15px',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  section: {
-    backgroundColor: 'white',
-    borderRadius: '8px',
-    padding: '10px',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-  },
-  sectionLabel: {
-    fontSize: '12px',
-    fontWeight: 'bold',
-    color: '#666',
-    marginBottom: '8px',
-  },
-  timeDisplay: {
-    fontSize: '40px',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: '10px',
-    color: '#1f2d3a',
-  },
-  timeControls: {
-    display: 'flex',
-    gap: '12px',
-    justifyContent: 'center',
-  },
-  timeColumn: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    alignItems: 'center',
-  },
-  timeLabel: {
-    fontSize: '11px',
-    color: '#666',
-    fontWeight: 'bold',
-  },
-  timeBtn: {
-    width: '70px',
-    height: '44px',
-    fontSize: '20px',
-    fontWeight: 'bold',
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  },
-  noItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  selectItemBtn: {
-    width: '180px',
-    height: '70px',
-    fontSize: '22px',
-    fontWeight: 'bold',
-    backgroundColor: '#e74c3c',
-    color: 'white',
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-  },
-  selectItemLabel: {
-    fontSize: '12px',
-    color: '#666',
-  },
-  selectedItem: {
-    textAlign: 'center',
-  },
-  selectedItemLabel: {
-    fontSize: '20px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: '6px',
-  },
-  selectedItemPath: {
-    fontSize: '12px',
-    color: '#666',
-    marginBottom: '10px',
-  },
-  clearBtn: {
-    backgroundColor: '#95a5a6',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    padding: '6px 20px',
-    fontSize: '13px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  quantityControls: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '16px',
-  },
-  quantityBtn: {
-    width: '70px',
-    height: '50px',
-    fontSize: '28px',
-    fontWeight: 'bold',
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  },
-  quantityDisplay: {
-    fontSize: '38px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    minWidth: '70px',
-    textAlign: 'center',
-  },
-  preview: {
-    backgroundColor: '#ecf0f1',
-    borderRadius: '6px',
-    padding: '10px',
-    textAlign: 'center',
-    fontSize: '14px',
-    color: '#2c3e50',
-    fontWeight: '500',
-  },
-  bottomButtons: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    marginTop: 'auto',
-  },
-  confirmBtn: {
-    height: '52px',
-    fontSize: '18px',
-    fontWeight: 'bold',
-    backgroundColor: '#27ae60',
-    color: 'white',
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-  },
-  confirmBtnDisabled: {
-    backgroundColor: '#bdc3c7',
-    cursor: 'not-allowed',
-  },
-  cancelBtn: {
-    height: '44px',
-    fontSize: '15px',
-    fontWeight: 'bold',
-    backgroundColor: '#95a5a6',
-    color: 'white',
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-  },
-  toast: {
-    position: 'fixed',
-    bottom: '16px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    backgroundColor: '#27ae60',
-    color: 'white',
-    padding: '10px 20px',
-    borderRadius: '6px',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    boxShadow: '0 3px 10px rgba(0,0,0,0.3)',
-    zIndex: 3000,
-  },
-  menuContent: {
-    padding: '12px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  menuItem: {
-    height: '52px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    backgroundColor: 'white',
-    color: '#2c3e50',
-    border: '2px solid #bdc3c7',
-    borderRadius: '10px',
-    cursor: 'pointer',
-  },
-  dangerBtn: {
-    backgroundColor: '#e74c3c',
-    color: 'white',
-    borderColor: '#c0392b',
-  },
-  tableContent: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  summary: {
-    backgroundColor: '#3498db',
-    color: 'white',
-    padding: '12px',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  recordList: {
-    flex: 1,
-    overflow: 'auto',
-  },
-  emptyState: {
-    padding: '30px',
-    textAlign: 'center',
-    color: '#95a5a6',
-    fontSize: '14px',
-  },
-  recordRow: {
-    padding: '10px',
-    borderBottom: '1px solid #ecf0f1',
-    backgroundColor: 'white',
-  },
-  voidRow: {
-    backgroundColor: '#ecf0f1',
-    color: '#95a5a6',
-  },
-  recordMain: {
-    marginBottom: '6px',
-  },
-  recordTime: {
-    fontSize: '14px',
-    fontWeight: 'bold',
-    marginBottom: '4px',
-  },
-  recordItem: {
-    fontSize: '15px',
-    marginBottom: '4px',
-  },
-  recordPrice: {
-    fontSize: '13px',
-    color: '#666',
-  },
-  voidBadge: {
-    color: '#e74c3c',
-    fontWeight: 'bold',
-    fontSize: '11px',
-  },
-  recordActions: {
-    display: 'flex',
-    gap: '8px',
-  },
-  actionBtn: {
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  voidBtn: {
-    backgroundColor: '#e74c3c',
   },
 
-  // ==============================
-  // Sales (daily ledger)
-  // ==============================
-  salesContent: {
-    flex: 1,
+  // ---------------------------------------------------------------------------
+  // TABLE SCREEN
+  // ---------------------------------------------------------------------------
+  tableContent: {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
-    padding: '10px 12px 12px',
+    flex: 1,
+    minHeight: 0,
   },
+
+  summary: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '10px 12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    fontWeight: 800,
+    color: '#0f172a',
+    fontSize: '13px',
+  },
+
+  recordList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    flex: 1,
+    minHeight: 0,
+  },
+
+  recordRow: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+
+  voidRow: {
+    opacity: 0.65,
+  },
+
+  recordMain: {
+    display: 'grid',
+    gridTemplateColumns: '72px 1fr',
+    gap: '10px',
+    alignItems: 'start',
+  },
+
+  recordTime: {
+    fontWeight: 900,
+    color: '#0f172a',
+    fontSize: '13px',
+    whiteSpace: 'nowrap',
+  },
+
+  recordItem: {
+    fontWeight: 900,
+    color: '#0f172a',
+    fontSize: '14px',
+    lineHeight: 1.2,
+    wordBreak: 'break-word',
+  },
+
+  recordPrice: {
+    gridColumn: '1 / -1',
+    color: '#334155',
+    fontSize: '13px',
+    fontWeight: 700,
+  },
+
+  voidBadge: {
+    marginLeft: '8px',
+    fontSize: '11px',
+    fontWeight: 900,
+    color: '#b91c1c',
+    border: '1px solid rgba(185, 28, 28, 0.35)',
+    backgroundColor: '#fff5f5',
+    borderRadius: '999px',
+    padding: '2px 8px',
+    verticalAlign: 'middle',
+  },
+
+  recordActions: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '8px',
+  },
+
+  actionBtn: {
+    height: '42px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+
+  voidBtn: {
+    borderColor: 'rgba(185, 28, 28, 0.35)',
+    backgroundColor: '#fff5f5',
+    color: '#b91c1c',
+  },
+
+  // ---------------------------------------------------------------------------
+  // SALES SCREEN (LEDGER)
+  // ---------------------------------------------------------------------------
+  salesContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    flex: 1,
+    minHeight: 0,
+  },
+
   salesFilters: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
     flexWrap: 'wrap',
+    gap: '8px',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
   },
+
   salesFilterLabel: {
     fontSize: '12px',
     fontWeight: 900,
-    opacity: 0.8,
+    color: '#334155',
     marginRight: '4px',
   },
+
   smallPill: {
     height: '34px',
     padding: '0 12px',
     borderRadius: '999px',
-    border: '1px solid rgba(0,0,0,0.22)',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
     backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 800,
     fontSize: '12px',
-    fontWeight: 900,
+    cursor: 'pointer',
   },
+
   smallPillActive: {
-    backgroundColor: '#111827',
-    color: '#fff',
-    borderColor: '#111827',
+    backgroundColor: '#0f172a',
+    color: '#ffffff',
   },
+
   salesTableWrap: {
-    flex: 1,
-    border: '1px solid rgba(0,0,0,0.15)',
+    backgroundColor: '#ffffff',
     borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
     overflow: 'hidden',
-    backgroundColor: '#fff',
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+    flex: 1,
   },
+
   salesHeaderRow: {
     display: 'grid',
-    gridTemplateColumns: '86px 1fr 78px 60px 96px',
-    gap: 0,
-    borderBottom: '1px solid rgba(0,0,0,0.12)',
-    backgroundColor: '#f3f4f6',
-  },
-  salesHeaderCellTime: {
-    height: '40px',
-    border: 'none',
-    backgroundColor: 'transparent',
+    gridTemplateColumns: '88px 1fr 60px 86px 96px',
+    gap: '0',
+    padding: '10px 10px',
+    borderBottom: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
     fontWeight: 900,
     fontSize: '12px',
+    color: '#334155',
+  },
+
+  salesHeaderCellTime: {
     textAlign: 'left',
-    padding: '0 10px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    padding: 0,
+    font: 'inherit',
+    fontWeight: 900,
+    color: '#334155',
     cursor: 'pointer',
   },
+
   salesHeaderCell: {
-    height: '40px',
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0 10px',
-    fontWeight: 900,
-    fontSize: '12px',
+    textAlign: 'left',
   },
+
   salesHeaderCellRight: {
-    height: '40px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    padding: '0 10px',
-    fontWeight: 900,
-    fontSize: '12px',
+    textAlign: 'right',
   },
+
   salesRow: {
     display: 'grid',
-    gridTemplateColumns: '86px 1fr 78px 60px 96px',
+    gridTemplateColumns: '88px 1fr 60px 86px 96px',
+    padding: '10px 10px',
+    borderBottom: '1px solid rgba(15, 23, 42, 0.06)',
     alignItems: 'center',
-    padding: '8px 0',
-    borderBottom: '1px solid rgba(0,0,0,0.08)',
     cursor: 'pointer',
   },
+
   creditRow: {
-    backgroundColor: '#fff5f5',
+    backgroundColor: '#fffaf0',
   },
+
   salesCellTime: {
-    padding: '0 10px',
     fontWeight: 900,
+    color: '#0f172a',
     fontSize: '12px',
+    whiteSpace: 'nowrap',
   },
+
   salesCellItem: {
-    padding: '0 10px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: '8px',
     minWidth: 0,
   },
+
   salesItemLabel: {
-    fontSize: '13px',
     fontWeight: 800,
+    color: '#0f172a',
+    fontSize: '13px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+
   salesCreditTag: {
-    flex: '0 0 auto',
     fontSize: '10px',
-    fontWeight: 1000,
-    padding: '3px 8px',
+    fontWeight: 900,
+    padding: '2px 8px',
     borderRadius: '999px',
-    border: '1px solid rgba(185,28,28,0.35)',
-    backgroundColor: '#fee2e2',
-    color: '#991b1b',
+    border: '1px solid rgba(234, 88, 12, 0.35)',
+    backgroundColor: '#fff7ed',
+    color: '#9a3412',
+    flexShrink: 0,
   },
+
   salesCellRight: {
-    padding: '0 10px',
     textAlign: 'right',
-    fontSize: '12px',
-    fontWeight: 900,
-  },
-  salesFooter: {
-    marginTop: '6px',
-    padding: '10px 12px',
-    border: '1px solid rgba(0,0,0,0.15)',
-    borderRadius: '12px',
-    backgroundColor: '#fff',
-  },
-  salesFooterText: {
-    fontSize: '13px',
-    fontWeight: 900,
-    opacity: 0.9,
-    textAlign: 'center',
-  },
-pickerOverlay: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: 'transparent',
-    overflow: 'hidden',
-  },
-pickerContainer: {
-    flex: 1,
-    width: '100%',
-    maxWidth: '100%',
-    backgroundColor: '#f7f9fb',
-    borderRadius: 0,
-    boxShadow: 'none',
-    border: 'none',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  pickerHeader: {
-    backgroundColor: '#2c3e50',
-    color: 'white',
-    padding: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  pickerBackBtn: {
-    backgroundColor: 'transparent',
-    color: 'white',
-    border: '2px solid white',
-    borderRadius: '6px',
-    padding: '6px 12px',
-    fontSize: '13px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  pickerTitle: {
-    fontSize: '16px',
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  pickerContent: {
-    padding: '12px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    overflow: 'auto',
-  },
-  pickerCategoryBtn: {
-    height: '50px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    textAlign: 'left',
-    paddingLeft: '16px',
-  },
-  pickerItemBtn: {
-    height: '50px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    backgroundColor: '#27ae60',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  },
-modalOverlay: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: 'transparent',
-    overflow: 'hidden',
-  },
-  modalContainer: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    width: '92vw',
-    maxWidth: '420px',
-    maxHeight: 'calc(100dvh - 24px)',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    boxSizing: 'border-box',
-  },
-
-  editSection: {
-    marginBottom: '16px',
-  },
-  editLabel: {
-    fontSize: '12px',
-    fontWeight: 'bold',
-    color: '#666',
-    marginBottom: '8px',
-  },
-  timeEditControls: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  timeEditColumn: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  timeEditBtn: {
-    width: '60px',
-    height: '38px',
-    fontSize: '18px',
-    fontWeight: 'bold',
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    cursor: 'pointer',
-  },
-  timeEditValue: {
-    fontSize: '28px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    minWidth: '50px',
-    textAlign: 'center',
-  },
-  timeEditSep: {
-    fontSize: '28px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-  },
-  editItemDisplay: {
-    fontSize: '16px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: '8px',
-    textAlign: 'center',
-  },
-  editChangeBtn: {
-    width: '100%',
-    height: '44px',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  },
-  editQuantityControls: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  editQuantityBtn: {
-    width: '60px',
-    height: '44px',
-    fontSize: '24px',
-    fontWeight: 'bold',
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  },
-  editQuantityValue: {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    minWidth: '60px',
-    textAlign: 'center',
-  },
-  editPreview: {
-    backgroundColor: '#ecf0f1',
-    borderRadius: '6px',
-    padding: '10px',
-    textAlign: 'center',
-    fontSize: '14px',
-    color: '#2c3e50',
-    fontWeight: '500',
-    marginTop: '12px',
-  },
-
-  modalSaveBtn: {
-    height: '48px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    backgroundColor: '#27ae60',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-  },
-  modalCancelBtn: {
-    height: '44px',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    backgroundColor: '#95a5a6',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-  },
-  tabBar: {
-    display: 'flex',
-    backgroundColor: '#ecf0f1',
-    padding: '0',
-  },
-  tab: {
-    flex: 1,
-    height: '44px',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    backgroundColor: 'transparent',
-    color: '#7f8c8d',
-    border: 'none',
-    borderBottom: '3px solid transparent',
-    cursor: 'pointer',
-  },
-  tabActive: {
-    color: '#2c3e50',
-    borderBottomColor: '#3498db',
-  },
-  manageContent: {
-    padding: '12px',
-    flex: 1,
-    overflow: 'auto',
-  },
-  addBtn: {
-    width: '100%',
-    height: '48px',
-    fontSize: '15px',
-    fontWeight: 'bold',
-    backgroundColor: '#27ae60',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    marginBottom: '12px',
-  },
-
-
-  manageRowInactive: {
-    backgroundColor: '#ecf0f1',
-  },
-  manageRowInfo: {
-    marginBottom: '8px',
-  },
-  manageRowLabel: {
-    fontSize: '15px',
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: '4px',
-  },
-  manageRowMeta: {
-    fontSize: '12px',
-    color: '#7f8c8d',
-  },
-  inactiveBadge: {
-    color: '#95a5a6',
-    fontSize: '11px',
-  },
-
-  manageActionBtn: {
-    backgroundColor: '#3498db',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  manageDeactivateBtn: {
-    backgroundColor: '#e67e22',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  manageActivateBtn: {
-    backgroundColor: '#27ae60',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-
-  // ==============================
-  // MANAGE ITEMS (Explorer rebuild)
-  // ==============================
-  manageTopBar: {
-    display: 'flex',
-    gap: '10px',
-    padding: '10px 10px 6px',
-  },
-  managePrimaryBtn: {
-    flex: 1,
-    height: '44px',
-    borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.22)',
-    backgroundColor: '#ffffff',
     fontWeight: 800,
-    cursor: 'pointer',
-  },
-  manageSecondaryBtn: {
-    flex: 1,
-    height: '44px',
-    borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.22)',
-    backgroundColor: '#ffffff',
-    fontWeight: 800,
-    cursor: 'pointer',
-  },
-
-  // ==============================
-  // SETTINGS
-  // ==============================
-  settingsContent: {
-    flex: 1,
-    padding: '10px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  settingsHint: {
-    backgroundColor: '#ffffff',
-    border: '1px solid rgba(0,0,0,0.18)',
-    borderRadius: '12px',
-    padding: '10px',
-    fontSize: '13px',
-    lineHeight: 1.3,
-  },
-  settingsStrip: {
-    backgroundColor: '#ffffff',
-    border: '1px solid rgba(0,0,0,0.18)',
-    borderRadius: '12px',
-    padding: '10px',
-  },
-  settingsStripTitle: {
-    fontWeight: 900,
-    marginBottom: '8px',
-  },
-  settingsSummary: {
-    backgroundColor: '#ffffff',
-    border: '1px solid rgba(0,0,0,0.18)',
-    borderRadius: '12px',
-    padding: '10px',
-    fontSize: '13px',
-  },
-  breadcrumbBar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '0 10px 10px',
-    overflowX: 'auto',
+    color: '#0f172a',
+    fontSize: '12px',
     whiteSpace: 'nowrap',
   },
-  breadcrumbBtn: {
-    border: '1px solid rgba(0,0,0,0.18)',
+
+  salesFooter: {
+    padding: '10px 12px',
+    borderTop: '1px solid rgba(15, 23, 42, 0.10)',
     backgroundColor: '#ffffff',
+  },
+
+  salesFooterText: {
+    fontSize: '12px',
+    fontWeight: 800,
+    color: '#334155',
+    textAlign: 'center',
+  },
+
+  // ---------------------------------------------------------------------------
+  // PICKER + MODALS (robust on any screen size)
+  // ---------------------------------------------------------------------------
+  pickerOverlay: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 50,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    padding: 'max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom))',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflowY: 'auto',
+  },
+
+  pickerContainer: {
+    width: 'min(560px, 100%)',
+    maxHeight: 'min(90svh, 760px)',
+    backgroundColor: '#ffffff',
+    borderRadius: '14px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    boxShadow: '0 18px 50px rgba(0,0,0,0.25)',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+
+  pickerHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '10px',
+    borderBottom: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+  },
+
+  pickerBackBtn: {
+    height: '40px',
+    padding: '0 12px',
     borderRadius: '10px',
-    padding: '6px 10px',
-    fontSize: '13px',
-    fontWeight: 700,
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    fontWeight: 900,
     cursor: 'pointer',
   },
-  breadcrumbSep: {
-    opacity: 0.6,
+
+  pickerTitle: {
     fontWeight: 900,
-  },
-  manageList: {
+    color: '#0f172a',
+    fontSize: '14px',
     flex: 1,
-    minHeight: 0,
+    textAlign: 'center',
+    minWidth: 0,
+  },
+
+  pickerContent: {
+    padding: '10px',
     overflowY: 'auto',
-    padding: '0 10px 12px',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
-  manageEmpty: {
-    padding: '14px',
+
+  pickerCategoryBtn: {
+    height: '46px',
     borderRadius: '12px',
-    border: '1px dashed rgba(0,0,0,0.25)',
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    fontWeight: 700,
-    opacity: 0.8,
-  },
-  manageRow: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'stretch',
-    padding: '10px',
-    borderRadius: '14px',
-    border: '1px solid rgba(0,0,0,0.18)',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
     backgroundColor: '#ffffff',
-  },
-  manageRowMain: {
-    flex: 1,
-    textAlign: 'left',
-    background: 'transparent',
-    border: 'none',
-    padding: 0,
-    cursor: 'pointer',
-  },
-  manageRowMainStatic: {
-    flex: 1,
-    textAlign: 'left',
-  },
-  manageRowTitle: {
+    color: '#0f172a',
     fontWeight: 900,
-    fontSize: '14px',
-    lineHeight: 1.2,
-  },
-  manageRowSub: {
-    marginTop: '4px',
-    fontSize: '12px',
-    opacity: 0.75,
-    fontWeight: 700,
-  },
-  manageRowActions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    width: '92px',
-  },
-  manageReorderRow: {
-    display: 'flex',
-    gap: '6px',
-  },
-  manageReorderBtn: {
-    flex: 1,
-    height: '28px',
-    borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.18)',
-    backgroundColor: '#f6f7f9',
-    fontWeight: 900,
-    fontSize: '14px',
     cursor: 'pointer',
-    lineHeight: 1,
-  },
-  manageReorderBtnDisabled: {
-    opacity: 0.35,
-    cursor: 'not-allowed',
+    textAlign: 'left',
+    padding: '0 12px',
   },
 
-  manageSmallBtn: {
-    height: '32px',
-    borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.18)',
-    backgroundColor: '#f6f7f9',
+  pickerItemBtn: {
+    height: '46px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
     fontWeight: 800,
-    fontSize: '12px',
     cursor: 'pointer',
-  },
-  manageSmallBtnDanger: {
-    height: '32px',
-    borderRadius: '10px',
-    border: '1px solid rgba(0,0,0,0.18)',
-    backgroundColor: '#ffeaea',
-    color: '#b00020',
-    fontWeight: 900,
-    fontSize: '12px',
-    cursor: 'pointer',
-  },
-  inactiveTag: {
-    marginLeft: '6px',
-    fontSize: '10px',
-    padding: '2px 6px',
-    borderRadius: '999px',
-    border: '1px solid rgba(0,0,0,0.18)',
-    backgroundColor: '#f0f0f0',
-    opacity: 0.85,
-    fontWeight: 900,
+    textAlign: 'left',
+    padding: '0 12px',
   },
 
-  // ==============================
-  // Modal field helpers (used by Manage Items)
-  // ==============================
-modalCard: {
-    flex: 1,
-    width: '100%',
-    maxWidth: '100%',
-    backgroundColor: '#f7f9fb',
-    borderRadius: 0,
-    boxShadow: 'none',
-    border: 'none',
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 55,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    padding: 'max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom))',
     display: 'flex',
-    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflowY: 'auto',
+  },
+
+  modalCard: {
+    width: 'min(560px, 100%)',
+    maxHeight: 'min(90svh, 760px)',
+    backgroundColor: '#ffffff',
+    borderRadius: '14px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    boxShadow: '0 18px 50px rgba(0,0,0,0.25)',
     overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
   },
+
+  modalContainer: {
+    // Back-compat for older modal component
+    width: 'min(560px, 100%)',
+    maxHeight: 'min(90svh, 760px)',
+    backgroundColor: '#ffffff',
+    borderRadius: '14px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    boxShadow: '0 18px 50px rgba(0,0,0,0.25)',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+
   modalHeader: {
-    padding: '12px 14px',
-    borderBottom: '1px solid rgba(0,0,0,0.10)',
-    fontWeight: 900,
+    padding: '12px 12px 10px',
+    borderBottom: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
   },
+
   modalTitle: {
-    fontSize: '15px',
     fontWeight: 900,
+    fontSize: '14px',
+    color: '#0f172a',
   },
+
   modalContent: {
-    padding: '12px 14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
+    padding: '12px',
+    overflowY: 'auto',
   },
+
   modalField: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
+    marginBottom: '10px',
   },
+
   modalLabel: {
     fontSize: '12px',
     fontWeight: 900,
-    opacity: 0.8,
+    color: '#334155',
+    marginBottom: '6px',
   },
+
   modalInput: {
-    height: '40px',
+    width: '100%',
+    height: '42px',
     borderRadius: '12px',
-    border: '1px solid rgba(0,0,0,0.20)',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
     padding: '0 12px',
     fontSize: '14px',
-    fontWeight: 700,
     outline: 'none',
+    boxSizing: 'border-box',
   },
-  modalSelect: {
-    height: '40px',
+
+  modalActions: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '10px',
+    padding: '12px',
+    borderTop: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#ffffff',
+  },
+
+  deleteBtn: {
+    gridColumn: '1 / -1',
+    height: '44px',
     borderRadius: '12px',
-    border: '1px solid rgba(0,0,0,0.20)',
-    padding: '0 12px',
-    fontSize: '14px',
-    fontWeight: 700,
-    outline: 'none',
-    backgroundColor: '#fff',
+    border: '1px solid rgba(185, 28, 28, 0.35)',
+    backgroundColor: '#fff5f5',
+    color: '#b91c1c',
+    fontWeight: 900,
+    cursor: 'pointer',
   },
+
+  modalSaveBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#0f172a',
+    color: '#ffffff',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+
+  modalCancelBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+
+  // ---------------------------------------------------------------------------
+  // Small form helpers used inside modals
+  // ---------------------------------------------------------------------------
+  draftGridRow2: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '10px',
+    alignItems: 'start',
+    marginBottom: '10px',
+  },
+
   radioRow: {
     display: 'flex',
     gap: '12px',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    height: '42px',
+    padding: '0 10px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    boxSizing: 'border-box',
   },
+
   radioLabel: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    fontSize: '14px',
+    gap: '8px',
+    fontWeight: 800,
+    color: '#0f172a',
+    fontSize: '13px',
+  },
+
+  radioText: {
     fontWeight: 800,
   },
-  radioText: {
-    position: 'relative',
-    top: '1px',
+
+  qtyRowInline: {
+    display: 'grid',
+    gridTemplateColumns: '48px 1fr 48px',
+    gap: '8px',
+    alignItems: 'center',
+    height: '42px',
   },
-  modalBodyText: {
-    fontSize: '14px',
-    fontWeight: 700,
-    opacity: 0.9,
-  },
-  modalActions: {
-    padding: '12px 14px',
-    borderTop: '1px solid rgba(0,0,0,0.10)',
-    display: 'flex',
-    gap: '10px',
-  },
-  modalBtn: {
-    flex: 1,
+
+  qtyInlineValue: {
     height: '42px',
     borderRadius: '12px',
-    border: '1px solid rgba(0,0,0,0.18)',
-    backgroundColor: '#f6f7f9',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 900,
+    color: '#0f172a',
+  },
+
+  draftPreviewLine: {
+    marginTop: '6px',
+    padding: '10px 12px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    fontWeight: 900,
+    color: '#0f172a',
+    fontSize: '13px',
+    wordBreak: 'break-word',
+  },
+
+  // ---------------------------------------------------------------------------
+  // Back-compat keys for the older EditModal (time edit)
+  // ---------------------------------------------------------------------------
+  editSection: {
+    marginBottom: '12px',
+  },
+  editLabel: {
+    fontSize: '12px',
+    fontWeight: 900,
+    color: '#334155',
+    marginBottom: '8px',
+  },
+  timeEditControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  timeEditColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '6px',
+  },
+  timeEditBtn: {
+    width: '56px',
+    height: '40px',
+    borderRadius: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+  timeEditValue: {
+    width: '56px',
+    height: '40px',
+    borderRadius: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 900,
+    color: '#0f172a',
+  },
+  timeEditSep: {
+    fontWeight: 900,
+    color: '#334155',
+    marginTop: '18px',
+  },
+  editItemDisplay: {
+    padding: '10px 12px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    fontWeight: 900,
+    color: '#0f172a',
+    marginBottom: '10px',
+  },
+  editChangeBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+  editQuantityControls: {
+    display: 'grid',
+    gridTemplateColumns: '56px 1fr 56px',
+    gap: '10px',
+    alignItems: 'center',
+  },
+  editQuantityBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    fontWeight: 900,
+    fontSize: '18px',
+    cursor: 'pointer',
+  },
+  editQuantityValue: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 900,
+    color: '#0f172a',
+  },
+  editPreview: {
+    marginTop: '10px',
+    padding: '10px 12px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    backgroundColor: '#f8fafc',
+    fontWeight: 900,
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+
+  // ---------------------------------------------------------------------------
+  // SETTINGS / MANAGE ITEMS (simple list layout)
+  // ---------------------------------------------------------------------------
+  settingsContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    flex: 1,
+    minHeight: 0,
+  },
+  settingsStrip: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    padding: '12px',
+  },
+  settingsHint: {
+    color: '#475569',
+    fontSize: '12px',
+    lineHeight: 1.3,
+  },
+
+  manageTopBar: {
+    display: 'flex',
+    gap: '10px',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  managePrimaryBtn: {
+    height: '44px',
+    padding: '0 12px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#0f172a',
+    color: '#ffffff',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+  manageSecondaryBtn: {
+    height: '44px',
+    padding: '0 12px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+  manageList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    flex: 1,
+    minHeight: 0,
+  },
+  manageRow: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+    padding: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  manageRowMain: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+  },
+  manageRowMainStatic: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    justifyContent: 'space-between',
+  },
+  manageRowTitle: {
+    fontWeight: 900,
+    color: '#0f172a',
+    fontSize: '14px',
+    minWidth: 0,
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  manageRowSub: {
+    color: '#475569',
+    fontSize: '12px',
+    fontWeight: 700,
+    lineHeight: 1.2,
+  },
+  manageRowActions: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
+  manageSmallBtn: {
+    height: '36px',
+    padding: '0 10px',
+    borderRadius: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+  manageSmallBtnDanger: {
+    borderColor: 'rgba(185, 28, 28, 0.35)',
+    backgroundColor: '#fff5f5',
+    color: '#b91c1c',
+  },
+  manageReorderRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  manageReorderBtn: {
+    height: '36px',
+    width: '40px',
+    borderRadius: '10px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+  manageReorderBtnDisabled: {
+    opacity: 0.45,
+    cursor: 'not-allowed',
+  },
+  manageEmpty: {
+    padding: '18px 12px',
+    textAlign: 'center',
+    color: '#475569',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    border: '1px dashed rgba(15, 23, 42, 0.16)',
+  },
+
+  // ---------------------------------------------------------------------------
+  // Breadcrumb
+  // ---------------------------------------------------------------------------
+  breadcrumbBar: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+    alignItems: 'center',
+    padding: '8px 10px',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.10)',
+  },
+  breadcrumbBtn: {
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#0f172a',
+    fontWeight: 900,
+    cursor: 'pointer',
+    padding: '4px 6px',
+    borderRadius: '8px',
+  },
+  breadcrumbSep: {
+    color: '#94a3b8',
+    fontWeight: 900,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Generic confirm modal (Manage items uses these)
+  // ---------------------------------------------------------------------------
+  modalBodyText: {
+    color: '#334155',
+    lineHeight: 1.3,
+    fontSize: '13px',
+  },
+  modalBtn: {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
     fontWeight: 900,
     cursor: 'pointer',
   },
   modalBtnPrimary: {
-    flex: 1,
-    height: '42px',
-    borderRadius: '12px',
-    border: '1px solid rgba(0,0,0,0.18)',
-    backgroundColor: '#dff7e6',
-    color: '#1b5e20',
-    fontWeight: 900,
-    cursor: 'pointer',
+    backgroundColor: '#0f172a',
+    color: '#ffffff',
   },
   modalBtnDanger: {
-    backgroundColor: '#ffeaea',
-    color: '#b00020',
+    borderColor: 'rgba(185, 28, 28, 0.35)',
+    backgroundColor: '#fff5f5',
+    color: '#b91c1c',
+  },
+  inactiveTag: {
+    fontSize: '10px',
+    fontWeight: 900,
+    padding: '2px 8px',
+    borderRadius: '999px',
+    border: '1px solid rgba(100, 116, 139, 0.35)',
+    backgroundColor: '#f1f5f9',
+    color: '#475569',
   },
 
+  modalSelect: {
+    width: '100%',
+    height: '42px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    padding: '0 10px',
+    fontSize: '14px',
+    backgroundColor: '#ffffff',
+    outline: 'none',
+    boxSizing: 'border-box',
+  },
+
+  settingsStripTitle: {
+    fontSize: '13px',
+    fontWeight: 900,
+    color: '#0f172a',
+    marginBottom: '6px',
+  },
+
+  settingsSummary: {
+    fontSize: '12px',
+    color: '#334155',
+    fontWeight: 800,
+    marginTop: '6px',
+  },
 };
