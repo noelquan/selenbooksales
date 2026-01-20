@@ -538,6 +538,151 @@ export default function SalesRecorder() {
   // RENDER SCREENS
   // ============================================================================
 
+
+  // ============================================================================
+  // FULL-SCREEN PANELS (replacing floating modals)
+  // ============================================================================
+  // These render as normal screens inside the app frame and can be closed.
+
+  if (showPicker) {
+    return (
+      <ItemPicker
+        shellStyle={shellStyle}
+        categories={categories}
+        items={items}
+        onSelect={(item) => {
+          setSelectedItem(item);
+          setShowPicker(false);
+        }}
+        onClose={() => setShowPicker(false)}
+      />
+    );
+  }
+
+  if (showDraftModal && selectedItem) {
+    return (
+      <DraftSaleModal
+        shellStyle={shellStyle}
+        categories={categories}
+        items={items}
+        initial={{
+          itemId: selectedItem.id,
+          itemLabel: selectedItem.label,
+          unitPrice: selectedItem.unit_price || 0,
+          quantity: quantity,
+          customerName: '',
+          paymentMethod: 'cash'
+        }}
+        onConfirm={({ itemId, itemLabel, unitPrice, quantity, customerName, paymentMethod }) => {
+          const t = getDraftTimeNumeric();
+          finalizeSale({
+            h12: t.h12,
+            min: t.min,
+            ampm: t.ampm,
+            itemId,
+            itemLabel,
+            unitPrice,
+            qty: quantity,
+            customerName,
+            paymentMethod
+          });
+        }}
+        onCancel={() => {
+          handleCancel();
+        }}
+        onClose={() => setShowDraftModal(false)}
+      />
+    );
+  }
+
+  if (showEditModal && editingRecord) {
+    return (
+      <EditModal
+        shellStyle={shellStyle}
+        record={editingRecord}
+        items={items}
+        categories={categories}
+        onSave={(updatedRecord) => {
+          const now = new Date();
+          const updated = {
+            ...updatedRecord,
+            updated_at_epoch_ms: now.getTime(),
+            updated_at_local: formatDateTime(now)
+          };
+          setRecords(records.map(r => r.entry_id === updated.entry_id ? updated : r));
+          setShowEditModal(false);
+          setEditingRecord(null);
+          setToast('Updated');
+          setTimeout(() => setToast(''), 2000);
+        }}
+        onCancel={() => {
+          setShowEditModal(false);
+          setEditingRecord(null);
+        }}
+      />
+    );
+  }
+
+  if (showSalesEditModal && salesEditing) {
+    return (
+      <SalesEditModal
+        shellStyle={shellStyle}
+        record={salesEditing}
+        categories={categories}
+        items={items}
+        onConfirm={(patch) => {
+          const typedLabel = String(patch.itemLabel || '').trim();
+          const price = Number(patch.unitPrice) || 0;
+          const qty = Math.max(1, Number(patch.quantity) || 1);
+          const total = price * qty;
+
+          const active = getActiveItemsWithPaths();
+          const norm = (x) => String(x || '').trim().toLowerCase();
+          const chosen = active.find(i => i.id === patch.itemId)
+            || active.find(i => norm(i.label) == norm(typedLabel))
+            || active.find(i => norm(`${i.categoryPath} > ${i.label}`) == norm(typedLabel));
+
+          const updated = {
+            ...salesEditing,
+            item_id: chosen ? chosen.id : '',
+            item_label: chosen ? chosen.label : typedLabel,
+            category_path: chosen ? chosen.categoryPath : 'Manual',
+            unit_price: price,
+            quantity: qty,
+            total_price: total,
+            customer_name: patch.customerName || '',
+            payment_method: patch.paymentMethod || 'cash',
+            updated_at_epoch_ms: Date.now(),
+            updated_at_local: formatDateTime(new Date())
+          };
+
+          if (!String(updated.item_label || '').trim()) {
+            setToast('Item required');
+            setTimeout(() => setToast(''), 2000);
+            return;
+          }
+
+          setRecords(prev => prev.map(r => r.entry_id === updated.entry_id ? updated : r));
+          setShowSalesEditModal(false);
+          setSalesEditing(null);
+          setToast('Updated');
+          setTimeout(() => setToast(''), 2000);
+        }}
+        onCancel={() => {
+          setShowSalesEditModal(false);
+          setSalesEditing(null);
+        }}
+        onDelete={() => {
+          setRecords(prev => prev.filter(r => r.entry_id !== salesEditing.entry_id));
+          setShowSalesEditModal(false);
+          setSalesEditing(null);
+          setToast('Deleted');
+          setTimeout(() => setToast(''), 2000);
+        }}
+      />
+    );
+  }
+
   if (screen === 'menu') {
     return (
       <div style={shellStyle}>
@@ -569,31 +714,6 @@ export default function SalesRecorder() {
 
     return (
       <div style={shellStyle}>
-        {showEditModal && editingRecord && (
-          <EditModal
-            record={editingRecord}
-            items={items}
-            categories={categories}
-            onSave={(updatedRecord) => {
-              const now = new Date();
-              const updated = {
-                ...updatedRecord,
-                updated_at_epoch_ms: now.getTime(),
-                updated_at_local: formatDateTime(now)
-              };
-              setRecords(records.map(r => r.entry_id === updated.entry_id ? updated : r));
-              setShowEditModal(false);
-              setEditingRecord(null);
-              setToast('Updated');
-              setTimeout(() => setToast(''), 2000);
-            }}
-            onCancel={() => {
-              setShowEditModal(false);
-              setEditingRecord(null);
-            }}
-          />
-        )}
-        
         <div style={styles.header}>
           <button style={styles.headerBtn} onClick={() => setScreen('entry')}>BACK</button>
           <div style={styles.headerTitle}>Table</div>
@@ -718,68 +838,6 @@ export default function SalesRecorder() {
 
     return (
       <div style={shellStyle}>
-        {showSalesEditModal && salesEditing && (
-          <SalesEditModal
-            record={salesEditing}
-            categories={categories}
-            items={items}
-            onConfirm={(patch) => {
-              // patch: { itemId?, itemLabel, unitPrice, quantity, customerName, paymentMethod }
-              const typedLabel = String(patch.itemLabel || '').trim();
-              const price = Number(patch.unitPrice) || 0;
-              const qty = Math.max(1, Number(patch.quantity) || 1);
-              const total = price * qty;
-
-              // If the typed label matches an existing active item, link to it.
-              const active = getActiveItemsWithPaths();
-              const norm = (x) => String(x || '').trim().toLowerCase();
-              const chosen = active.find(i => i.id === patch.itemId)
-                || active.find(i => norm(i.label) == norm(typedLabel))
-                || active.find(i => norm(`${i.categoryPath} > ${i.label}`) == norm(typedLabel));
-
-              const updated = {
-                ...salesEditing,
-                item_id: chosen ? chosen.id : '',
-                item_label: chosen ? chosen.label : typedLabel,
-                category_path: chosen ? chosen.categoryPath : 'Manual',
-                unit_price: price,
-                quantity: qty,
-                total_price: total,
-                customer_name: patch.customerName || '',
-                payment_method: patch.paymentMethod || 'cash',
-                updated_at_epoch_ms: Date.now(),
-                updated_at_local: formatDateTime(new Date())
-              };
-
-              // Require an item label (either from menu or manual)
-              if (!String(updated.item_label || '').trim()) {
-                setToast('Item required');
-                setTimeout(() => setToast(''), 2000);
-                return;
-              }
-
-              setRecords(prev => prev.map(r => r.entry_id === updated.entry_id ? updated : r));
-              setShowSalesEditModal(false);
-              setSalesEditing(null);
-              setToast('Updated');
-              setTimeout(() => setToast(''), 2000);
-            }}
-            onCancel={() => {
-              setShowSalesEditModal(false);
-              setSalesEditing(null);
-            }}
-            onDelete={() => {
-              // NOTE: Avoid window.confirm() because some embedded preview environments block it,
-              // making the Delete button appear to do nothing.
-              setRecords(prev => prev.filter(r => r.entry_id !== salesEditing.entry_id));
-              setShowSalesEditModal(false);
-              setSalesEditing(null);
-              setToast('Deleted');
-              setTimeout(() => setToast(''), 2000);
-            }}
-          />
-        )}
-
         <div style={styles.header}>
           <button style={styles.headerBtn} onClick={() => setScreen('menu')}>BACK</button>
           <div style={styles.headerTitle}>Sales</div>
@@ -895,52 +953,7 @@ export default function SalesRecorder() {
   // Entry Screen
   return (
     <div style={shellStyle}>
-      {showDraftModal && selectedItem && (
-        <DraftSaleModal
-          categories={categories}
-          items={items}
-          initial={{
-            itemId: selectedItem.id,
-            itemLabel: selectedItem.label,
-            unitPrice: selectedItem.unit_price || 0,
-            quantity: quantity,
-            customerName: '',
-            paymentMethod: 'cash'
-          }}
-          onConfirm={({ itemId, itemLabel, unitPrice, quantity, customerName, paymentMethod }) => {
-            const t = getDraftTimeNumeric();
-            finalizeSale({
-              h12: t.h12,
-              min: t.min,
-              ampm: t.ampm,
-              itemId,
-              itemLabel,
-              unitPrice,
-              qty: quantity,
-              customerName,
-              paymentMethod
-            });
-          }}
-          onCancel={() => {
-            // Cancel from modal cancels the whole sale
-            handleCancel();
-          }}
-          onClose={() => setShowDraftModal(false)}
-        />
-      )}
-      {showPicker && (
-        <ItemPicker
-          categories={categories}
-          items={items}
-          onSelect={(item) => {
-            setSelectedItem(item);
-            setShowPicker(false);
-          }}
-          onClose={() => setShowPicker(false)}
-        />
-      )}
-      
-      {/* Original (Claude-style) layout, tightened up, with + above time and − below */}
+            {/* Original (Claude-style) layout, tightened up, with + above time and − below */}
       <div style={styles.header}>
         <button style={styles.headerBtn} onClick={() => setScreen('menu')}>MENU</button>
         <div style={styles.headerTitle}>Sales Recorder</div>
@@ -1033,7 +1046,7 @@ export default function SalesRecorder() {
 // ITEM PICKER COMPONENT
 // ============================================================================
 
-function ItemPicker({ categories, items, onSelect, onClose }) {
+function ItemPicker({ shellStyle, categories, items, onSelect, onClose }) {
   const [breadcrumb, setBreadcrumb] = useState([]);
 
   const currentCategoryId = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].id : null;
@@ -1073,36 +1086,36 @@ function ItemPicker({ categories, items, onSelect, onClose }) {
   };
 
   return (
-    <div style={styles.pickerOverlay}>
-      <div style={styles.pickerContainer}>
-        <div style={styles.pickerHeader}>
-          <button style={styles.pickerBackBtn} onClick={handleBack}>
-            {breadcrumb.length > 0 ? 'BACK' : 'CLOSE'}
+    <div style={shellStyle}>
+      <div style={styles.header}>
+        <button style={styles.headerBtn} onClick={handleBack}>
+          {breadcrumb.length > 0 ? 'BACK' : 'CLOSE'}
+        </button>
+        <div style={styles.headerTitle}>
+          {breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].label : 'Select Item'}
+        </div>
+        <div style={styles.headerBtnGhost} />
+      </div>
+
+      <div style={styles.pickerContentPanel}>
+        {childCategories.map(cat => (
+          <button
+            key={cat.id}
+            style={styles.pickerCategoryBtn}
+            onClick={() => handleCategoryClick(cat)}
+          >
+            {cat.label} →
           </button>
-          <div style={styles.pickerTitle}>
-            {breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].label : 'Select Item'}
-          </div>
-        </div>
-        <div style={styles.pickerContent}>
-          {childCategories.map(cat => (
-            <button 
-              key={cat.id} 
-              style={styles.pickerCategoryBtn}
-              onClick={() => handleCategoryClick(cat)}
-            >
-              {cat.label} →
-            </button>
-          ))}
-          {childItems.map(item => (
-            <button 
-              key={item.id} 
-              style={styles.pickerItemBtn}
-              onClick={() => handleItemClick(item)}
-            >
-              {item.label} · ${formatMoney(item.unit_price)}
-            </button>
-          ))}
-        </div>
+        ))}
+        {childItems.map(item => (
+          <button
+            key={item.id}
+            style={styles.pickerItemBtn}
+            onClick={() => handleItemClick(item)}
+          >
+            {item.label} · ${formatMoney(item.unit_price)}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1112,7 +1125,7 @@ function ItemPicker({ categories, items, onSelect, onClose }) {
 // DRAFT SALE MODAL (from Entry screen preview)
 // ============================================================================
 
-function DraftSaleModal({ categories, items, initial, onConfirm, onCancel, onClose }) {
+function DraftSaleModal({ shellStyle, categories, items, initial, onConfirm, onCancel, onClose }) {
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
   const escapeCsv = (s) => String(s ?? '').replace(/"/g, '""');
 
@@ -1306,7 +1319,7 @@ function DraftSaleModal({ categories, items, initial, onConfirm, onCancel, onClo
 // SALES EDIT MODAL (for existing records)
 // ============================================================================
 
-function SalesEditModal({ record, categories, items, onConfirm, onCancel, onDelete }) {
+function SalesEditModal({ shellStyle, record, categories, items, onConfirm, onCancel, onDelete }) {
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
   const buildCategoryPath = (categoryId) => {
@@ -1458,7 +1471,7 @@ function SalesEditModal({ record, categories, items, onConfirm, onCancel, onDele
 // EDIT MODAL COMPONENT
 // ============================================================================
 
-function EditModal({ record, items, categories, onSave, onCancel }) {
+function EditModal({ shellStyle, record, items, categories, onSave, onCancel }) {
   const int = (x) => {
     const n = parseInt(x, 10);
     return Number.isFinite(n) ? n : 0;
@@ -1535,7 +1548,7 @@ function EditModal({ record, items, categories, onSave, onCancel }) {
   };
 
   return (
-    <div style={styles.modalOverlay}>
+    <div style={shellStyle}>
       <div style={styles.modalContainer}>
         {showItemPicker ? (
           <ItemPicker
@@ -2070,8 +2083,13 @@ function ManageItemsScreen({ shellStyle, categories, items, onUpdateCategories, 
 
       {/* Folder modal */}
       {folderModal.open && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
+        <div style={shellStyle}>
+          <div style={styles.header}>
+        <button style={styles.headerBtn} onClick={onClose}>CLOSE</button>
+        <div style={styles.headerTitle}>Edit Sale</div>
+        <div style={styles.headerBtnGhost} />
+      </div>
+      <div style={styles.panelBody}>
             <div style={styles.modalHeader}>
               <div style={styles.modalTitle}>{folderModal.mode === 'add' ? 'Create Folder' : 'Edit Folder'}</div>
             </div>
@@ -2108,8 +2126,13 @@ function ManageItemsScreen({ shellStyle, categories, items, onUpdateCategories, 
 
       {/* Item modal */}
       {itemModal.open && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
+        <div style={shellStyle}>
+          <div style={styles.header}>
+        <button style={styles.headerBtn} onClick={onCancel}>CLOSE</button>
+        <div style={styles.headerTitle}>Edit Sale</div>
+        <div style={styles.headerBtnGhost} />
+      </div>
+      <div style={styles.panelBody}>
             <div style={styles.modalHeader}>
               <div style={styles.modalTitle}>{itemModal.mode === 'add' ? 'Create Item' : 'Edit Item'}</div>
             </div>
@@ -2156,8 +2179,13 @@ function ManageItemsScreen({ shellStyle, categories, items, onUpdateCategories, 
 
       {/* Confirm modal */}
       {confirmModal.open && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
+        <div style={shellStyle}>
+          <div style={styles.header}>
+        <button style={styles.headerBtn} onClick={onCancel}>CLOSE</button>
+        <div style={styles.headerTitle}>Edit Entry</div>
+        <div style={styles.headerBtnGhost} />
+      </div>
+      <div style={styles.panelBody}>
             <div style={styles.modalHeader}>
               <div style={styles.modalTitle}>{confirmModal.title}</div>
             </div>
@@ -3310,30 +3338,24 @@ const styles = {
     opacity: 0.9,
     textAlign: 'center',
   },
-  pickerOverlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+pickerOverlay: {
+    flex: 1,
     display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '12px',
-    paddingTop: 'max(12px, env(safe-area-inset-top))',
-    paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-    overflowY: 'auto',
-    zIndex: 1000,
-    boxSizing: 'border-box',
+    flexDirection: 'column',
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
   },
-  pickerContainer: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    width: '92vw',
-    maxWidth: '420px',
-    maxHeight: 'calc(100dvh - 24px)',
+pickerContainer: {
+    flex: 1,
+    width: '100%',
+    maxWidth: '100%',
+    backgroundColor: '#f7f9fb',
+    borderRadius: 0,
+    boxShadow: 'none',
+    border: 'none',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    boxSizing: 'border-box',
   },
   pickerHeader: {
     backgroundColor: '#2c3e50',
@@ -3387,19 +3409,12 @@ const styles = {
     borderRadius: '6px',
     cursor: 'pointer',
   },
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+modalOverlay: {
+    flex: 1,
     display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '12px',
-    paddingTop: 'max(12px, env(safe-area-inset-top))',
-    paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-    overflowY: 'auto',
-    zIndex: 2000,
-    boxSizing: 'border-box',
+    flexDirection: 'column',
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
   },
   modalContainer: {
     backgroundColor: 'white',
@@ -3812,15 +3827,17 @@ const styles = {
   // ==============================
   // Modal field helpers (used by Manage Items)
   // ==============================
-  modalCard: {
-    width: '92vw',
-    maxWidth: '420px',
-    maxHeight: 'calc(100dvh - 24px)',
-    borderRadius: '16px',
-    backgroundColor: '#ffffff',
-    border: '1px solid rgba(0,0,0,0.18)',
+modalCard: {
+    flex: 1,
+    width: '100%',
+    maxWidth: '100%',
+    backgroundColor: '#f7f9fb',
+    borderRadius: 0,
+    boxShadow: 'none',
+    border: 'none',
+    display: 'flex',
+    flexDirection: 'column',
     overflow: 'hidden',
-    boxSizing: 'border-box',
   },
   modalHeader: {
     padding: '12px 14px',
